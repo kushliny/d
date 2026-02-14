@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clash Royale Online - Copy Code Edition</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #gameContainer {
+            width: 450px;
+            height: 800px;
+            background: #2d5016;
+            position: relative;
+            border: 4px solid #8B4513;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,0.9);
+        }
+
+        canvas { width: 100%; height: 100%; display: block; }
+
+        /* SPELL KARTY - ORANŽOVÝ RÁM */
+        .card.spell-card {
+            border: 3px solid #FF8C00 !important;
+            box-shadow: 0 0 15px rgba(255, 140, 0, 0.6);
+            background: linear-gradient(135deg, #4d2600 0%, #2a1a00 100%) !important;
+        }
+
+        .hand {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            pointer-events: none;
+        }
+
+        .card {
+            width: 70px;
+            height: 90px;
+            background: #5a5a5a;
+            border: 3px solid #666;
+            border-radius: 10px;
+            cursor: pointer;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            position: relative;
+            transition: transform 0.2s;
+        }
+
+        .card.selected { border-color: #FFD700; transform: translateY(-10px); }
+
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            background: #FFA500;
+            border: none;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 8px;
+            width: 220px;
+            transition: 0.2s;
+        }
+
+        .btn:hover { background: #FF8C00; transform: scale(1.05); }
+        .btn.secondary { background: #444; }
+
+        /* MULTIPLAYER UI */
+        .code-box {
+            background: #222;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px dashed #FFA500;
+            margin: 15px 0;
+            width: 100%;
+        }
+
+        #myPeerId {
+            font-family: monospace;
+            color: #FFD700;
+            font-size: 18px;
+            display: block;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+
+        input {
+            padding: 12px;
+            border-radius: 10px;
+            border: none;
+            width: 220px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .copy-badge {
+            font-size: 10px;
+            background: #00ff00;
+            color: black;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 5px;
+            display: none;
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="gameUI" class="hidden">
+        <div class="hand" id="hand"></div>
+    </div>
+
+    <div class="screen" id="mainMenu">
+        <h1>⚔️ ROYAL CLASH</h1>
+        <button class="btn" onclick="startSinglePlayer()">SÓLO HRA</button>
+        <button class="btn" onclick="showMultiplayer()">MULTIPLAYER ONLINE</button>
+    </div>
+
+    <div class="screen hidden" id="multiplayerMenu">
+        <h2>PŘIPOJENÍ</h2>
+        
+        <div class="code-box">
+            <p style="font-size: 12px; opacity: 0.7;">Tvůj kód:</p>
+            <span id="myPeerId">Generuji...</span>
+            <button class="btn" style="width: auto; padding: 5px 15px; font-size: 12px;" onclick="copyMyCode()">
+                📋 KOPÍROVAT KÓD <span id="copyFeedback" class="copy-badge">Kopírováno!</span>
+            </button>
+        </div>
+
+        <p style="margin: 10px 0;">Vlož kód kamaráda:</p>
+        <input type="text" id="joinId" placeholder="Zde vlož kód...">
+        <button class="btn" onclick="connectToFriend()">PŘIPOJIT SE K HRÁČI</button>
+        <button class="btn secondary" onclick="showMenu()">ZPĚT</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 450;
+    canvas.height = 800;
+
+    const ALL_CARDS = [
+        { id: 'knight', name: 'Knight', icon: '⚔️', cost: 3, type: 'troop' },
+        { id: 'archer', name: 'Archer', icon: '🏹', cost: 3, type: 'troop' },
+        { id: 'fireball', name: 'Fireball', icon: '🔥', cost: 4, type: 'spell' },
+        { id: 'arrows', name: 'Arrows', icon: '🏹', cost: 3, type: 'spell' }
+    ];
+
+    let playerHand = [...ALL_CARDS];
+    let selectedCard = null;
+    let peer = new Peer();
+    let conn = null;
+    let myId = "";
+
+    // PeerJS události
+    peer.on('open', (id) => {
+        myId = id;
+        document.getElementById('myPeerId').textContent = id;
+    });
+
+    peer.on('connection', (c) => {
+        conn = c;
+        setupCommunication();
+        startGame();
+    });
+
+    function copyMyCode() {
+        navigator.clipboard.writeText(myId).then(() => {
+            const feedback = document.getElementById('copyFeedback');
+            feedback.style.display = 'inline-block';
+            setTimeout(() => feedback.style.display = 'none', 2000);
+        });
+    }
+
+    function connectToFriend() {
+        const friendId = document.getElementById('joinId').value;
+        if (!friendId) return;
+        conn = peer.connect(friendId);
+        setupCommunication();
+        conn.on('open', startGame);
+    }
+
+    function setupCommunication() {
+        conn.on('data', (data) => {
+            if (data.type === 'spawn') {
+                drawAction(data.x, data.y, 'red');
+            }
+        });
+    }
+
+    function showMenu() {
+        document.getElementById('mainMenu').classList.remove('hidden');
+        document.getElementById('multiplayerMenu').classList.add('hidden');
+    }
+
+    function showMultiplayer() {
+        document.getElementById('mainMenu').classList.add('hidden');
+        document.getElementById('multiplayerMenu').classList.remove('hidden');
+    }
+
+    function startSinglePlayer() { startGame(); }
+
+    function startGame() {
+        document.getElementById('mainMenu').classList.add('hidden');
+        document.getElementById('multiplayerMenu').classList.add('hidden');
+        document.getElementById('gameUI').classList.remove('hidden');
+        updateHandUI();
+        render();
+    }
+
+    function updateHandUI() {
+        const handDiv = document.getElementById('hand');
+        handDiv.innerHTML = '';
+        playerHand.forEach((card, index) => {
+            const el = document.createElement('div');
+            // ORANŽOVÝ RÁM PRO SPELLY
+            const isSpell = card.type === 'spell';
+            el.className = `card ${isSpell ? 'spell-card' : ''} ${selectedCard === index ? 'selected' : ''}`;
+            el.innerHTML = `<span>${card.icon}</span><small>${card.name}</small>`;
+            el.onclick = () => { selectedCard = index; updateHandUI(); };
+            handDiv.appendChild(el);
+        });
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (selectedCard === null) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        if (conn) {
+            conn.send({ type: 'spawn', x: x, y: y });
+        }
+        drawAction(x, y, 'blue');
+        selectedCard = null;
+        updateHandUI();
+    });
+
+    function drawAction(x, y, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, 20, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    function render() {
+        // Jednoduchý render pozadí
+        ctx.fillStyle = "#2d5016";
+        ctx.fillRect(0,0,450, 390);
+        ctx.fillRect(0,410,450, 390);
+        ctx.fillStyle = "#4fa3ff";
+        ctx.fillRect(0, 390, 450, 20); // řeka
+        requestAnimationFrame(render);
+    }
+</script>
+
+</body>
+</html>
